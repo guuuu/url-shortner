@@ -1,29 +1,58 @@
+const dotenv = require('dotenv');
+dotenv.config();
 const express = require("express");
 const app = express();
-const fs = require("fs");
 const monk = require("monk");
 const helmet = require("helmet");
 const PORT = process.env.PORT || 8080;
-const dotenv = require('dotenv');
+const yup = require("yup");
+const { nanoid } = require("nanoid");
+const db = monk(process.env.MONGODB_URI)
+const urls = db.get("urls");
+const path = require("path");
+const bodyParser = require("body-parser");
 
 app.use(helmet());
-app.use(express.static("/public"));
-app.use(express.json);
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-dotenv.config();
-
-app.get("/", (req, res, next) =>{
-    res.status(200).send({
-        "message": "ok"
-    })
+const schema = yup.object().shape({
+    id: yup.string().trim().matches(/[a-zA-Z0-9_\-]/i),
+    url: yup.string().trim().url().required()
 })
+app.get("/:id", async (req, res, next) => {
+    const { id } = req.params;
+    const data = await urls.findOne({ "id": id });
+    if(!data){ res.status(404).redirect(`/?error=${id} not found`); }
+    else{ res.status(301).redirect(data.url); }
+});
 
-app.get("/:id", (req, res, next) => {
-    res.status(200).send({
-        "message": "test"
-    })
-})
+app.post("/gen", async (req, res, next) => {
+    let { id, url } = req.body;
+    try{
+        await schema.validate({ id, url });
+        if(!id){ id = nanoid(6); }
+        else{
+            const exists = await urls.findOne({ id });
+            if(exists){ throw new Error("This short URL is already in use. 🍔"); }
+        }
+        id = id.toLowerCase();
+        const ins = await urls.insert({ "id": id, "url": url });
+        if(ins){ res.status(200).json({ "short_url": `${req.secure ? "https" : "http"}:\/\/${req.get("host")}/${id}` }); }
+        else{ throw new Error("Something went wrong. 🤦"); }
+    }
+    catch(err){ next(err) }
+});
 
-app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-})
+app.use((error, req, res, next) => {
+    if(error.status) res.status(error.status)
+    else res.status(500)
+    res.json({
+        message: error.message,
+        stack: process.env.NODE_ENV === "production" ? "🥞" : error.stack
+    });
+});
+
+app.listen(PORT, () => { console.log(`Server listening on port ${PORT}`); })
