@@ -5,14 +5,30 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gxsh - URL shortner</title>
+    <link rel="stylesheet" href="assets/css/bootstrap.min.css">
+    <script src="assets/js/bootstrap.min.js"></script>
     <link rel="stylesheet" href="assets/css/style.css">
     <script src="assets/js/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <h1>gxsh - Simple URL shortner</h1>
-    <input id="id" type="text" placeholder="identifier for your short url" >
-    <input id="url" type="url" placeholder="URL" >
-    <button id="sub">Shorten it</button>
+    <div class="container-fluid h-100">
+        <div class="row h-100">
+            <main class="col-xl-9 col-lg-9 col-md-8 col-sm-12 d-flex flex-column align-items-center">
+                <h1>gxsh - simple URL shortner</h1>
+                <div class="center">
+                    <input id="id" type="text" placeholder="Identifier for your short url. ex.: cool" >
+                    <input id="url" type="url" placeholder="URL" autocomplete="off">
+                    <button id="sub">Shorten it</button>
+                </div>  
+            </main>
+            <div id="old_urls" class="col-xl-3 col-lg-3 col-md-4 col-sm-12 h-75">
+                <h1>Old URL's</h1>
+            </div>
+        </div>
+    </div>
+    <footer class="d-flex flex-row align-items-center justify-content-center">
+        Developed by&nbsp;<a href="https://guuuu.github.io/gxdev" target="_blank">gxdev</a>.
+    </footer>
     <script src="assets/js/client.js"></script>
 </body>
 </html>

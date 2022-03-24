@@ -11,9 +11,19 @@ const db = monk(process.env.MONGODB_URI)
 const urls = db.get("urls");
 const path = require("path");
 const bodyParser = require("body-parser");
+const rateLimit = require("express-rate-limit")
+
+const limiter = rateLimit({
+	windowMs: 60 * 60 * 1000,
+	max: 4,
+    message: "Your making too many requests (20 urls per hour)",
+	standardHeaders: true,
+	legacyHeaders: false,
+});
 
 app.use(helmet());
 app.use(express.json());
+app.use("/gen", limiter);
 app.use(express.static(path.join(__dirname, "public")));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -29,21 +39,24 @@ app.get("/:id", async (req, res, next) => {
     else{ res.status(301).redirect(data.url); }
 });
 
-app.post("/gen", async (req, res, next) => {
-    let { id, url } = req.body;
-    try{
-        await schema.validate({ id, url });
-        if(!id){ id = nanoid(6); }
-        else{
-            const exists = await urls.findOne({ id });
-            if(exists){ throw new Error("This short URL is already in use. 🍔"); }
+app.post("/gen", limiter, async (req, res, next) => {
+    if(req.rateLimit.remaining > 0){
+        let { id, url } = req.body;
+        try{
+            if(!id){ id = nanoid(6); }
+            else{
+                const exists = await urls.findOne({ id });
+                if(exists){ throw new Error("This short URL is already in use. 🍔"); }
+            }
+            await schema.validate({ id, url });
+            id = id.toLowerCase();
+            const ins = await urls.insert({ "id": id, "url": url });
+            if(ins){ res.status(200).json({ "message": null, "short_url": `${req.secure ? "https" : "http"}:\/\/${req.get("host")}/${id}` }); }
+            else{ throw new Error("Something went wrong. 🤦"); }
         }
-        id = id.toLowerCase();
-        const ins = await urls.insert({ "id": id, "url": url });
-        if(ins){ res.status(200).json({ "short_url": `${req.secure ? "https" : "http"}:\/\/${req.get("host")}/${id}` }); }
-        else{ throw new Error("Something went wrong. 🤦"); }
+        catch(err){ next(err) }
     }
-    catch(err){ next(err) }
+    else{ res.status(429).json({ "message": "Your sending too many requests." }) }
 });
 
 app.use((error, req, res, next) => {
