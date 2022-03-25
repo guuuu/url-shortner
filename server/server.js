@@ -10,13 +10,14 @@ const { nanoid } = require("nanoid");
 const db = monk(process.env.MONGODB_URI)
 const urls = db.get("urls");
 const bans = db.get("banned_ips");
+const tries = db.get("tries");
 const path = require("path");
 const bodyParser = require("body-parser");
 const rateLimit = require("express-rate-limit")
 const limit_requests = 42;
 const limiter = rateLimit({
 	windowMs: 60 * 60 * 1000,
-	max: 8,
+	max: limit_requests,
     message: {"message": "Your sending too many requests (20 urls per hour)!"},
 	standardHeaders: true,
 	legacyHeaders: false,
@@ -45,10 +46,21 @@ app.get("/:id", async (req, res, next) => {
 });
 
 app.post("/gen", limiter, async (req, res, next) => {
-    let ip = req.ip;
+    const ip = req.ip;
+    let n = await tries.findOne({"ip": ip}) || null;
+    if(n !== null){
+        if(n.count >= 25){ 
+            await bans.insert( { "ip": req.ip } ); 
+            await tries.remove({ "ip": ip });
+        }
+    }
+
     const banned = await bans.findOne({ ip });
+
     if(!banned){
         if(req.rateLimit.remaining > 0){
+            if(n !== null){ tries.remove({ "ip": ip }); }
+
             let { id, url } = req.body;
             try{
                 if(!id){ id = nanoid(6); }
@@ -65,7 +77,9 @@ app.post("/gen", limiter, async (req, res, next) => {
             catch(err){ next(err) }
         }
         else{
-            await bans.insert( { "ip": req.ip } );
+            if(n !== null){ tries.findOneAndUpdate({ "ip": ip }, { $set: { "count": n.count + 1 } }) }
+            else{ await tries.insert({ "ip": ip, "count": 1 }); }
+
             res.status(429).send({ "message": `Your sending too many requests (${(limit_requests/2)-1} URLs per hour)` });
         }
     }
